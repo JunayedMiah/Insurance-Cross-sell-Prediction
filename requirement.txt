@@ -1,0 +1,25 @@
+# Core data handling
+pandas==2.3.3
+numpy==2.4.4
+
+# Distributed data processing (Databricks provides this on cluster,
+# only needed here for local development/testing outside Databricks)
+pyspark==4.2.0
+
+# Visualization
+matplotlib==3.10.8
+seaborn==0.13.2
+
+# Modeling
+scikit-learn==1.8.0
+xgboost==3.4.1
+
+# Hyperparameter tuning
+optuna==4.9.0
+
+# Explainability
+shap==0.52.0
+lime==0.2.0.1
+
+# Experiment tracking and model registry
+mlflow==3.15.1
