@@ -47,12 +47,11 @@ Promoted the tuned model from development to the Unity Catalog staging area, and
 
 | Metric | Baseline (Logistic Regression) | Final (Tuned XGBoost) |
 |---|---|---|
-| ROC AUC | `<fill in from your MLflow run>` | `<fill in from your MLflow run>` |
-| F1 Score | `<fill in from your MLflow run>` | `<fill in from your MLflow run>` |
-| Precision | `<fill in from your MLflow run>` | `<fill in from your MLflow run>` |
-| Recall | `<fill in from your MLflow run>` | `<fill in from your MLflow run>` |
+| ROC AUC | `0.8237` | `0.8328` |
+| F1 Score | `0.3804` | `0.4239` |
+| Precision | `0.2371` | `0.2737` |
+| Recall | `0.9608` | `0.8957` |
 
-*(Pull these straight from the MLflow run you registered in Unity Catalog. Real numbers here matter more than a polished looking table with placeholders left in.)*
 
 ## Business Insights
 
@@ -84,30 +83,3 @@ Used together, they act as a cross check on each other. Where SHAP and LIME agre
 | Tuning | Optuna |
 | Explainability | SHAP, LIME |
 | Experiment tracking | MLflow |
-
-## Repository Structure
-
-```
-.
-├── README.md
-├── notebooks/
-│   └── insurance_cross_sell.py        # Databricks notebook source
-├── data/                               # not committed, see Reproducing below
-└── artifacts/
-    ├── shap_summary.png
-    ├── shap_waterfall_examples.png
-    └── lime_examples.png
-```
-
-## Reproducing This Project
-
-1. Upload the Kaggle Health Insurance Cross Sell CSVs to a Unity Catalog Volume or `/FileStore/tables/`.
-2. Import `notebooks/insurance_cross_sell.py` into your Databricks workspace (recognized automatically as a notebook from the source format).
-3. Attach an ML runtime cluster and run all cells. SHAP and LIME install themselves in the first cell.
-4. Check the MLflow experiment for the logged metrics, and Unity Catalog for the registered model.
-
-## Author
-
-Md Junayed Miah
-MSc Data Science, Friedrich Alexander Universitat Erlangen Nurnberg
-[junayed.miah7667@gmail.com](mailto:junayed.miah7667@gmail.com) · [Portfolio](https://junayedmiah.github.io)
