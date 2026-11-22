@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check src tests scripts
+      - name: Test
+        run: pytest -q
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t insurance-api .
+      - name: Smoke test
+        run: |
+          docker run -d -p 8000:8000 --name api insurance-api
+          for i in $(seq 1 20); do curl -sf localhost:8000/health && break; sleep 2; done
+          curl -sf -X POST localhost:8000/predict -H 'Content-Type: application/json' \
+            -d '{"Gender":"Male","Age":44,"Driving_License":1,"Region_Code":28,"Previously_Insured":0,"Vehicle_Age":"> 2 Years","Vehicle_Damage":"Yes","Annual_Premium":40454,"Policy_Sales_Channel":26,"Vintage":217}'

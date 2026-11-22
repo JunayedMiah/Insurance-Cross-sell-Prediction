@@ -1,85 +1,100 @@
-# Explainable Insurance Cross Sell Prediction
+# Explainable Insurance Cross-Sell API
 
-Predicting which existing health insurance customers are likely to buy vehicle insurance, with every prediction explained through SHAP and LIME. Built end to end on Databricks with MLflow tracking and Unity Catalog model governance.
+A production-style REST API that predicts whether a health-insurance customer will buy vehicle insurance, and explains **every single prediction** with SHAP values. Built for regulated industries, where a model has to justify its decisions to customers and auditors.
 
-![Databricks](https://img.shields.io/badge/Databricks-FF3621?style=flat-square&logo=databricks&logoColor=white)
-![MLflow](https://img.shields.io/badge/MLflow-0194E2?style=flat-square&logo=mlflow&logoColor=white)
-![XGBoost](https://img.shields.io/badge/XGBoost-2452E8?style=flat-square)
-![Optuna](https://img.shields.io/badge/Optuna-4169E1?style=flat-square)
-![SHAP](https://img.shields.io/badge/SHAP-1C9A5B?style=flat-square)
-![LIME](https://img.shields.io/badge/LIME-B5790E?style=flat-square)
+**Stack:** Python · XGBoost · scikit-learn · FastAPI · Pydantic · Docker · GitHub Actions
 
-## Objective and Business Context
+```
+data/train.csv ──► train.py ──► models/model.joblib ──► FastAPI ──► /predict
+                   (preprocess, XGBoost,                 (validation,  { probability,
+                    F1-tuned threshold)                   logging)       top_reasons[SHAP] }
+```
 
-Cross selling is one of the most direct ways an insurer grows revenue from an existing customer base, but only if the right customers are targeted. This project builds a model that predicts whether a health insurance customer will respond positively to a vehicle insurance offer, and goes a step further by explaining why the model made each decision, using Explainable AI techniques (SHAP and LIME) rather than treating the model as a black box.
+## Results
 
-## Dataset
+Trained on the [Kaggle Health Insurance Cross Sell Prediction](https://www.kaggle.com/datasets/anmolkumar/health-insurance-cross-sell-prediction) data, held-out test set:
 
-Kaggle Health Insurance Cross Sell dataset, loaded into Databricks with Spark. About 16 percent of customers in the raw data show interest in the offer, so class imbalance was a factor throughout the project, from evaluation metric choice to model tuning.
+| Metric | Value |
+| --- | --- |
+| F1 (positive class) | _fill in after training_ |
+| ROC AUC | _fill in_ |
+| PR AUC | _fill in_ |
 
-## Workflow
+Run `make train` and copy the numbers it prints.
 
-**1. Data loading and initial exploration**
-Loaded the dataset from Kaggle into Databricks using Spark, and ran an initial exploratory pass to understand feature distributions and confirm the class imbalance (about 16 percent positive rate).
+## Example
 
-**2. Exploratory data analysis and visualization**
-Analyzed each feature against the target using Matplotlib and Seaborn. Two patterns stood out early: customers with a prior vehicle damage history are far more likely to buy, while customers who already have vehicle insurance are far less likely to respond.
+```bash
+curl -X POST localhost:8000/predict -H "Content-Type: application/json" -d '{
+  "Gender": "Male", "Age": 44, "Driving_License": 1, "Region_Code": 28,
+  "Previously_Insured": 0, "Vehicle_Age": "> 2 Years", "Vehicle_Damage": "Yes",
+  "Annual_Premium": 40454, "Policy_Sales_Channel": 26, "Vintage": 217 }'
+```
 
-**3. Data preprocessing and feature engineering**
-Categorical features (Gender, Vehicle Age, Vehicle Damage) were one hot encoded. Numerical features (Age, Annual Premium, Vintage) were scaled with StandardScaler. Engineered a Premium Per Age ratio feature to surface patterns not explicit in the raw columns.
+```json
+{
+  "probability": 0.83,
+  "interested": true,
+  "threshold": 0.32,
+  "top_reasons": [
+    {"feature": "Previously_Insured", "value": "0",   "shap_value": 1.05},
+    {"feature": "Vehicle_Damage",     "value": "Yes", "shap_value": 0.38},
+    {"feature": "Age",                "value": "44",  "shap_value": 0.38}
+  ]
+}
+```
 
-**4. Train test split and baseline models**
-Split the data 80/20 with stratification to preserve class balance. Trained three baseline algorithms, Logistic Regression, Random Forest, and XGBoost, evaluated primarily on Precision, Recall, F1 Score, and ROC AUC rather than raw accuracy, since accuracy is misleading on imbalanced data.
+Positive SHAP values push towards "interested", negative ones away from it (log-odds scale).
 
-**5. Hyperparameter optimization with Optuna**
-Tuned the XGBoost model with Optuna instead of manual search or grid search. Ran 50 trials over estimator count, max depth, learning rate, and regularization terms, and used the best trial's parameters for the final model.
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /predict` | One customer, with explanation |
+| `POST /predict/batch` | Up to 1,000 customers |
+| `GET /model-info` | Model version, threshold, test metrics |
+| `GET /health` | Liveness check |
+| `GET /docs` | Interactive Swagger UI |
 
-**6. Experiment tracking with MLflow**
-Logged every run's hyperparameters, metrics, the trained model artifact, and all generated charts as MLflow artifacts. Registered the final model in Unity Catalog for version control and downstream access.
+## Design decisions
 
-**7. Global and local explainability with SHAP and LIME**
-Used SHAP bar and beeswarm plots to identify the strongest global drivers (Vehicle Damage among the top), and SHAP waterfall plots to explain individual customer predictions. Ran LIME as an independent, model agnostic comparison. SHAP gave highly consistent explanations across repeated runs; LIME was noticeably faster per explanation but showed more run to run variation in which features it surfaced.
+- **Threshold tuned for F1 on a validation split**, not the default 0.5. The positive class is rare (~12–16%), so 0.5 misses most interested customers. Metrics are reported on a separate test split.
+- **Exact TreeSHAP from XGBoost** (`pred_contribs=True`) instead of the `shap` package: same values, no extra dependency, a smaller image, and fast enough for real-time requests.
+- **One explanation per business feature:** one-hot columns (e.g. `Vehicle_Age_< 1 Year`) are summed back into `Vehicle_Age`, so the explanation reads the way a business user thinks.
+- **Rare and unseen categories are grouped** (`min_frequency`, `handle_unknown="infrequent_if_exist"`), so a new region code does not crash the API.
+- **Strict input validation** with Pydantic: an invalid age or an unknown category returns HTTP 422 with a clear message.
+- **Model trained during the Docker build:** the image always contains a model that matches its code versions.
 
-**8. Final registration and documentation**
-Promoted the tuned model from development to the Unity Catalog staging area, and compiled the workflow and SHAP findings into this documentation for reproducibility and handoff.
+## Run it
 
-## Key Results
+```bash
+make install                        # dependencies
+# put Kaggle's train.csv into data/  (or: make sample  for synthetic data)
+make train                          # trains and prints metrics
+make serve                          # http://localhost:8000/docs
+make test                           # 13 tests, using synthetic data
+make docker                         # build and run the container
+```
 
-| Metric | Baseline (Logistic Regression) | Final (Tuned XGBoost) |
-|---|---|---|
-| ROC AUC | `0.8237` | `0.8328` |
-| F1 Score | `0.3804` | `0.4239` |
-| Precision | `0.2371` | `0.2737` |
-| Recall | `0.9608` | `0.8957` |
+## CI
 
+On every push, GitHub Actions lints with ruff, runs the tests, builds the Docker image and sends a real prediction to the running container.
 
-## Business Insights
+## Deploy (free)
 
-- **Prior vehicle damage is the strongest single driver.** Customers with a damage history respond at a materially higher rate than those without.
-- **Vintage matters.** Longer tenured customers are more likely to respond positively, which suggests loyalty and trust play a role in cross sell success.
-- **Explanations agree across methods.** SHAP and LIME converge on the same top features for individual customers, which gives the marketing team confidence the model is picking up real signal rather than noise.
+1. Push this repo to GitHub.
+2. On [Render](https://render.com), create a **Web Service** from the repo; it detects the Dockerfile.
+3. Use `/health` as the health-check path.
 
-These findings let the marketing team prioritize outreach toward damage history and tenure segments with a documented, defensible reason for each targeting decision, not just a score.
+Without `data/train.csv` in the repo, the build trains on synthetic data, which is fine for a demo. For real numbers, train locally and describe the results here.
 
-## Explainability: SHAP vs LIME
+## Project structure
 
-| | SHAP | LIME |
-|---|---|---|
-| Consistency across runs | High, near identical explanations each time | Lower, some run to run variation |
-| Speed per explanation | Slower (exact, game theoretic) | Faster |
-| Scope | Global and local | Local only |
-| Model assumptions | Exact for tree models via TreeExplainer | Fully model agnostic |
-
-Used together, they act as a cross check on each other. Where SHAP and LIME agree on a customer's top drivers, that agreement is a reliability signal; where they diverge, that feature is worth treating with more caution before acting on it.
-
-## Tech Stack
-
-| Layer | Tools |
-|---|---|
-| Platform | Databricks Runtime for ML, Unity Catalog |
-| Data | Spark, Pandas, NumPy |
-| Visualization | Matplotlib, Seaborn |
-| Modeling | Scikit learn, XGBoost |
-| Tuning | Optuna |
-| Explainability | SHAP, LIME |
-| Experiment tracking | MLflow |
+```
+src/insurance_api/
+  features.py   shared preprocessing (training and serving use the same code)
+  train.py      training, threshold tuning, evaluation, optional MLflow logging
+  model.py      loads the artifact, predicts, builds SHAP explanations
+  schema.py     Pydantic request/response models
+  main.py       FastAPI app
+scripts/make_sample_data.py   synthetic data with the Kaggle schema (for tests and CI)
+tests/                        API and feature tests
+```
